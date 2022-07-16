@@ -1,16 +1,13 @@
 import {
-  concatMap,
-  delay,
+  combineLatest,
   fromEvent,
   interval,
-  of,
+  map,
+  startWith,
 } from 'rxjs';
 
 let summary = document.querySelector<HTMLDivElement>(".summary")!;
 let pauseBtn = document.querySelector<HTMLButtonElement>("button")!;
-let paused = false;
-let lastNotification = 0;
-let notificationEmitter
 
 function createNotification(title: string, text:string): HTMLDivElement {
     let notificationContainer = document.createElement('div');
@@ -34,42 +31,41 @@ function addNotificationToSummary(title: string, text: string): void {
 
 let notificationQueue: number[] = [];
 
-function startNotificationEmitter() {
-    let notificationEmitter = interval(1200)
-    .subscribe({
-        next: (value) => {
-            if (paused) {
-                notificationQueue.push(value);
-                console.log(notificationQueue);
+let notifications$ = interval(1200);
+
+let paused$ = fromEvent(pauseBtn, "click")
+    .pipe(
+        map((e) => {
+            let targetBtn = e.target;
+            if ((targetBtn as HTMLButtonElement).innerText === "PAUSE NOTIFICATIONS") {
+                return true;
+            } else {
+                return false;
             }
-            else {
-                let currentNotificationTitle = document.querySelector<HTMLParagraphElement>(".always-present-notification .notification-title")!;
-                currentNotificationTitle.innerText = `Titlu ${value}`;
-            }
+        }),
+        startWith(false)
+    )
+
+let combined$ = combineLatest(notifications$, paused$)
+    .subscribe(pair => {
+        let [title, pauseState] = pair;
+
+        if (pauseState === true) {
+            pauseBtn.innerText = "RESUME NOTIFICATIONS";
+        } else {
+            pauseBtn.innerText = "PAUSE NOTIFICATIONS";
+        }
+
+        if (pauseState === true) {
+            notificationQueue.push(title);
+            summary.innerHTML = "";
+        } else {
+            let currentNotificationTitle = document.querySelector<HTMLParagraphElement>(".always-present-notification .notification-title")!;
+            currentNotificationTitle.innerText = `Titlu ${title}`;
+
+            notificationQueue.forEach(notification => {
+                addNotificationToSummary(notification.toString(), "Acesta este titlul notificarii");
+            })
+            notificationQueue = [];
         }
     });
-}
-
-
-let detectPauseClick = fromEvent(pauseBtn, "click")
-    .subscribe(() => {
-        if (paused) {
-            summary.innerHTML = "";
-            paused = false;
-            pauseBtn.innerText = "PAUSE NOTIFICATIONS";
-
-            let pausedNotifications = of(...notificationQueue)
-                .pipe(concatMap((number) => of(number).pipe(delay(1000))))
-                .subscribe({
-                    next: (number) => addNotificationToSummary(number.toString(), "Acesta este textul notificarii"),
-                    complete: () => {
-                        notificationQueue = [];
-                    }
-                })
-        } else {
-            paused = true;
-            pauseBtn.innerText = "RESUME NOTIFICATIONS";
-        }
-    })
-
-startNotificationEmitter();

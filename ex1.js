@@ -1,7 +1,9 @@
-const { fromEvent, async, debounceTime } = require("rxjs");
+import { ajax } from 'rxjs/ajax';
+
+const { fromEvent, async, debounceTime, map, distinctUntilChanged, tap, switchMap, catchError, of, filter } = require("rxjs");
 
 let element = document.querySelector(".search-container input");
-let currentQueryState = "";
+const url = `https://restcountries.com/v3.1/name/`;
 
 function createCountryCard(countryJson) {
     let results = document.querySelector('.results');
@@ -32,37 +34,29 @@ function clearPreviousResults() {
     results.innerHTML = "";
 }
 
-let observer = {
-    next: async event => {
-        let query = event.target.value;
-        
-        const url = `https://restcountries.com/v3.1/name/${query}`;
-
-        if (query !== currentQueryState) {
-            clearPreviousResults();
-
-            currentQueryState = query;
-
-            if (currentQueryState === "") {
-                return;
-            }
-
-            let queryResult = await fetch(url);
-            let queryResultJson = await queryResult.json();
-            console.log(queryResultJson);
-            if (queryResultJson.message !== "Page Not Found" && queryResultJson.message !== "Not Found") {
-                queryResultJson.forEach(country => {
-                    createCountryCard(country);
-                })
-            } else {
+let obs = fromEvent(element, "input")
+    .pipe(
+        debounceTime(500),
+        map(event => event.target.value),
+        distinctUntilChanged(),
+        tap(clearPreviousResults),
+        filter(query => query !== ""),
+        switchMap(query => {
+            return ajax.getJSON(`${url}${query}`)
+        }),
+        catchError((err, caught) => {
+            if (err) {
                 createCountryCard({
                     eroare: "nu s-a gasit resursa cautata"
                 })
             }
+            return caught;
+        })
+    )
+    .subscribe({
+        next: (jsonArray) => {
+            jsonArray.forEach(json => {
+                createCountryCard(json);
+            })
         }
-    }
-}
-
-let obs = fromEvent(element, "input")
-    .pipe(debounceTime(500))
-    .subscribe(observer)
+    })

@@ -1,8 +1,12 @@
-import { fromEvent } from 'rxjs';
+import {
+  fromEvent,
+  switchMap,
+  takeUntil,
+  tap,
+} from 'rxjs';
 
 let canvas = document.querySelector("canvas");
 let ctx = canvas.getContext("2d");
-let mouseUp = true;
 let colorPicker = document.querySelector<HTMLInputElement>(".color-picker input");
 let resetBtn = document.querySelector<HTMLButtonElement>(".color-picker button");
 
@@ -42,17 +46,17 @@ function drawRectangle(event: MouseEvent): void {
 }
 
 let detectMouseDownObservable = fromEvent(canvas, "mousedown")
-    .subscribe((e: PointerEvent) => mouseUp = false)
-
-let detectMouseUpObservable = fromEvent(canvas, "mouseup")
-    .subscribe((e: PointerEvent) => mouseUp = true)
-
-let detectMouseMovementObservable = fromEvent(canvas, "mousemove")
-    .subscribe((e: MouseEvent) => {
-        if (mouseUp === false) {
-            drawRectangle(e);
-        }
-    })
+    .pipe(
+        tap((e: MouseEvent) => drawRectangle(e)),
+        switchMap(e => {
+            return fromEvent(canvas, "mousemove")
+                .pipe(
+                    takeUntil(fromEvent(canvas, "mouseup"))
+                )
+        }),
+        
+    )
+    .subscribe(drawRectangle);
 
 let detectChangeOfColor = fromEvent(colorPicker, "input")
     .subscribe((e: InputEvent) => {
